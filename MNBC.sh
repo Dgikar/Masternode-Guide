@@ -1,60 +1,96 @@
-#!/bin/sh
-# A shell script written to automate the MNBC Masternode Setup Process
+#/bin/bash
+clear
+echo "Do you want to install all needed dependencies (no if you did it before)? [y/n]"
+read DOSETUP
 
-Green=$(echo '\033[00;32m')
-Cyan=$(echo '\033[00;36m')
-RED=$(echo '\033[00;31m')
-YELLOW=$(echo  '\033[00;33m')
+if [[ $DOSETUP =~ "y" ]] ; then
+  sudo apt-get update
+  sudo apt-get -y upgrade
+  sudo apt-get -y dist-upgrade
+  sudo apt-get install -y nano htop git curl
+  sudo apt-get install -y software-properties-common
+  sudo apt-get install -y build-essential libtool autotools-dev pkg-config libssl-dev
+  sudo apt-get install -y libboost-all-dev libzmq3-dev
+  sudo apt-get install -y libevent-dev
+  sudo apt-get install -y libminiupnpc-dev
+  sudo apt-get install -y autoconf
+  sudo apt-get install -y automake unzip
+  sudo add-apt-repository  -y  ppa:bitcoin/bitcoin
+  sudo apt-get update
+  sudo apt-get install -y libdb4.8-dev libdb4.8++-dev
 
-echo "${Green}Im Starting to update!"
-	apt update
+  cd /var
+  sudo touch swap.img
+  sudo chmod 600 swap.img
+  sudo dd if=/dev/zero of=/var/swap.img bs=1024k count=4000
+  sudo mkswap /var/swap.img
+  sudo swapon /var/swap.img
+  sudo free
+  sudo echo "/var/swap.img none swap sw 0 0" >> /etc/fstab
+  cd
+  mkdir -p ~/bin
+  echo 'export PATH=~/bin:$PATH' > ~/.bash_aliases
+  source ~/.bashrc
+fi
 
-echo "${Green}I've Finished updating! Now I need to upgrade."
-	apt upgrade -y
+echo "Do you want to compile Daemon (please choose no if you did it before)? [y/n]"
+read DOSETUPTWO
 
-echo "${Green}I've finished upgrading! Now I need to install dependencies"
-	sudo apt-get install nano unzip git -y
+if [[ $DOSETUPTWO =~ "y" ]] ; then
 
-echo "${Green}I've finished installing dependencies! Now I'll make folders and download the wallet."
-	wget https://github.com/MNBrowsing/MN-Browsing-Coin/releases/download/v1.0/MNBC-1.0.0-x86_64-pc-linux-gnu.zip
-	unzip MN MNBC-1.0.0-x86_64-pc-linux-gnu.zip
-	chmod +x mnbrowsingcoin*
-	
-	./mnbrowsingcoind -daemon
-	sleep 5
-	./mnbrowsingcoin-cli stop
-echo "${Green}I've finished making folders and downloading the wallet! Now I'll create your mnbrowsingcoin.conf file."	
-	cd /root/.mnbrowsingcoin/
-	touch /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	touch /root/.mnbrowsingcoin/masternode.conf
-	echo "rpcallowip=127.0.0.1" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	sleep 5
-	echo "${Green}Enter an RPC username (It doesn't matter really what it is, just try to make it secure)"
-		read username
-			echo "rpcuser=$username" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
+mnbrowsingcoin-cli stop > /dev/null 2>&1
+wget https://github.com/MNBrowsing/MN-Browsing-Coin/releases/download/v1.1/MNBC-1.1.0-x86_64-pc-linux-gnu.zip
+unzip MNBC-1.1.0-x86_64-pc-linux-gnu.zip
+mv mnbrowsingcoind /usr/local/bin/mnbrowsingcoind
+mv mnbrowsingcoin-cli /usr/local/bin/mnbrowsingcoin-cli
+chmod +x /usr/local/bin/mnbrowsingcoin*
+fi
 
-	echo "${Green}Enter an RPC password(It doesn't matter really what it is, just try to make it secure)"
-		read password
-			echo "rpcpassword=$password" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	
-	echo "server=1" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	echo "listen=1" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	echo "staking=1" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	echo "port=59867" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	echo "masternode=1" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	
-	echo "${Green}What is the Global IP of your VPS? I'll put this into your config file for you because I'm so nice."
-		read VPSip
-			echo "masternodeaddr=$VPSip:59867" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-			echo "bind=$VPSip:59867" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-			echo "externalip=$VPSip:59867" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
-	         
-	echo "${Green}What is your masternode genkey? I'll put this into your config file."
-		read genkey
-			echo "masternodeprivkey=$genkey" >> /root/.mnbrowsingcoin/mnbrowsingcoin.conf
+echo ""
+echo "Configuring IP - Please Wait......."
 
-	
-echo "${YELLOW}Okay, it looks like you are all set. Let's startup the daemon!"
-	cd /root/
+declare -a NODE_IPS
+for ips in $(netstat -i | awk '!/Kernel|Iface|lo/ {print $1," "}')
+do
+  NODE_IPS+=($(curl --interface $ips --connect-timeout 2 -s4 icanhazip.com))
+done
 
-	./mnbrowsingcoind -daemon
+if [ ${#NODE_IPS[@]} -gt 1 ]
+  then
+    echo -e "More than one IP. Please type 0 to use the first IP, 1 for the second and so on...${NC}"
+    INDEX=0
+    for ip in "${NODE_IPS[@]}"
+    do
+      echo ${INDEX} $ip
+      let INDEX=${INDEX}+1
+    done
+    read -e choose_ip
+    IP=${NODE_IPS[$choose_ip]}
+else
+  IP=${NODE_IPS[0]}
+fi
+
+echo "IP Done"
+echo ""
+echo "Enter masternode private key for node $ALIAS , Go To your Windows Wallet Tools > Debug Console , Type masternode genkey"
+read PRIVKEY
+
+CONF_DIR=~/.mnbrowsingcoin/
+CONF_FILE=mnbrowsingcoin.conf
+PORT=59867
+
+mkdir -p $CONF_DIR
+echo "rpcuser=user"`shuf -i 100000-10000000 -n 1` > $CONF_DIR/$CONF_FILE
+echo "rpcpassword=pass"`shuf -i 100000-10000000 -n 1` >> $CONF_DIR/$CONF_FILE
+echo "listen=1" >> $CONF_DIR/$CONF_FILE
+echo "server=1" >> $CONF_DIR/$CONF_FILE
+echo "daemon=1" >> $CONF_DIR/$CONF_FILE
+echo "logtimestamps=1" >> $CONF_DIR/$CONF_FILE
+echo "masternode=1" >> $CONF_DIR/$CONF_FILE
+echo "port=$PORT" >> $CONF_DIR/$CONF_FILE
+echo "mastenodeaddr=$IP:$PORT" >> $CONF_DIR/$CONF_FILE
+echo "masternodeprivkey=$PRIVKEY" >> $CONF_DIR/$CONF_FILE
+
+mnbrowsingcoind -daemon
+
+

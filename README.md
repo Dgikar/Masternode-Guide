@@ -2,4 +2,4 @@
 
 Ubuntu 16.04x64
 
-wget https://raw.githubusercontent.com/MNBrowsing/Masternode-Guide/master/MNBC.sh &&  bash MNBC.sh
+wget https://github.com/MNBrowsing/MN-Browsing-Coin/releases/download/v1.1/mnbc-mn.sh && bash mnbc-mn.sh
